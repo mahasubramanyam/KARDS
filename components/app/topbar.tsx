@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Bell, Check, ChevronDown, Command, LogOut, Search, Settings } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
