@@ -723,6 +723,7 @@ dependencies = [
     { name = "celery" },
     { name = "email-validator" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "pillow" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pwdlib", extra = ["argon2"] },
@@ -738,7 +739,6 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "httpx" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
 ]
@@ -751,6 +751,7 @@ requires-dist = [
     { name = "celery", specifier = ">=5.4.0" },
     { name = "email-validator", specifier = ">=2.2.0" },
     { name = "fastapi", specifier = ">=0.115.0" },
+    { name = "httpx", specifier = ">=0.27.0" },
     { name = "pillow", specifier = ">=11.0.0" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2.3" },
     { name = "pwdlib", extras = ["argon2"], specifier = ">=0.2.1" },
@@ -766,7 +767,6 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "httpx", specifier = ">=0.27.0" },
     { name = "pytest", specifier = ">=8.3.0" },
     { name = "pytest-asyncio", specifier = ">=0.24.0" },
 ]

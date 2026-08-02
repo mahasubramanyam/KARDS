@@ -116,8 +116,16 @@ export default function RegisterPage() {
       push("success", "Account created!", "We sent a verification link to your email.");
     } catch (e) {
       const err = e as ApiError;
-      if (err.status === 409) setError("An account with this email already exists. Try signing in.");
-      else setError(err.message || "Registration failed. Please try again.");
+      if (err.status === 409) {
+        setError("An account with this email already exists. Try signing in.");
+      } else {
+        const detailErrors = (err.detail?.errors as Array<{ msg?: string; loc?: string[] }>) ?? [];
+        if (detailErrors.length > 0) {
+          setError(detailErrors.map((d) => `${d.loc?.[d.loc.length - 1] ?? "Field"}: ${d.msg}`).join(" · "));
+        } else {
+          setError(err.message || "Registration failed. Please try again.");
+        }
+      }
     } finally {
       setLoading(false);
     }

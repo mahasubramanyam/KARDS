@@ -13,11 +13,21 @@ from app.models.user import User
 from app.services.audit import RequestContext
 from app.services.container import Services
 
+from app.db.session import SessionLocal, get_db
+
 DB = Annotated[Session, Depends(get_db)]
 
 
-def get_services(db: DB) -> Services:
-    return Services(db)
+def get_services() -> Generator[Services, None, None]:
+    db = SessionLocal()
+    try:
+        yield Services(db)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
 
 
 SERVICES = Annotated[Services, Depends(get_services)]
