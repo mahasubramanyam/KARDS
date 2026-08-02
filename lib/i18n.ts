@@ -1,0 +1,55 @@
+import { Language } from "./types";
+
+export const i18n: Record<Language, Record<string, string>> = {
+  en: {
+    nav_how: "How it works",
+    nav_ngos: "For NGOs",
+    nav_companies: "For Companies",
+    nav_pricing: "Pricing",
+    nav_login: "Sign in",
+    nav_cta: "Get started",
+    hero_badge: "CSR compliance, made board-ready",
+    hero_title_1: "Turn CSR spend into",
+    hero_title_2: "proof that survives the boardroom",
+    hero_sub:
+      "Kards verifies and CSR-readies tier-2/3 NGOs, then matches them with corporate budgets and employee time — with Schedule VII-mapped, audit-ready compliance reports built in.",
+    hero_cta: "Start for free",
+    hero_secondary: "Book a demo",
+    hero_trust: "Trusted by 4,120+ verified NGOs and 86 companies",
+    footer_rights: "All rights reserved.",
+  },
+  hi: {
+    nav_how: "यह कैसे काम करता है",
+    nav_ngos: "NGO के लिए",
+    nav_companies: "कंपनियों के लिए",
+    nav_pricing: "मूल्य निर्धारण",
+    nav_login: "साइन इन",
+    nav_cta: "शुरू करें",
+    hero_badge: "CSR अनुपालन, बोर्ड-तैयार",
+    hero_title_1: "CSR खर्च को बदलें",
+    hero_title_2: "ऐसे सबूत में जो बोर्डरूम में टिके",
+    hero_sub:
+      "Kards टियर-2/3 NGO को सत्यापित और CSR-तैयार करता है, फिर उन्हें कॉर्पोरेट बजट और कर्मचारी समय से जोड़ता है — शेड्यूल VII मैप्ड, ऑडिट-रेडी रिपोर्ट्स के साथ।",
+    hero_cta: "मुफ्त शुरू करें",
+    hero_secondary: "डेमो बुक करें",
+    hero_trust: "4,120+ सत्यापित NGO और 86 कंपनियों का विश्वास",
+    footer_rights: "सर्वाधिकार सुरक्षित।",
+  },
+  ta: {
+    nav_how: "இது எப்படி செயல்படுகிறது",
+    nav_ngos: "NGO களுக்கு",
+    nav_companies: "நிறுவனங்களுக்கு",
+    nav_pricing: "விலை",
+    nav_login: "உள்நுழைக",
+    nav_cta: "தொடங்குங்கள்",
+    hero_badge: "CSR இணக்கம், போர்டுக்கு தயார்",
+    hero_title_1: "CSR செலவை மாற்றுங்கள்",
+    hero_title_2: "போர்டுரூமில் நிற்கும் ஆதாரமாக",
+    hero_sub:
+      "Kards தரம் 2/3 NGOs-ஐ சரிபார்த்து CSR-தயார் நிலைக்கு கொண்டு வந்து, அவற்றை கார்ப்பரேட் பட்ஜெட் மற்றும் ஊழியர் நேரத்துடன் இணைக்கிறது — Schedule VII வரைபடம், தணிக்கைக்கு தயாரான அறிக்கைகளுடன்.",
+    hero_cta: "இலவசமாகத் தொடங்குங்கள்",
+    hero_secondary: "டெமோ பதிவு செய்க",
+    hero_trust: "4,120+ சரிபார்க்கப்பட்ட NGOs மற்றும் 86 நிறுவனங்களின் நம்பிக்கை",
+    footer_rights: "அனைத்து உரிமைகளும் பாதுகாக்கப்பட்டவை.",
+  },
+};
