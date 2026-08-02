@@ -36,7 +36,7 @@ const steps = [
 
 export function HowItWorks() {
   return (
-    <section className="relative overflow-hidden py-24 sm:py-32">
+    <section id="nav_how" className="relative overflow-hidden py-24 sm:py-32">
       <div className="absolute inset-x-0 top-1/2 -z-10 h-64 -translate-y-1/2 bg-primary/8 blur-[120px]" />
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <SectionHeading
