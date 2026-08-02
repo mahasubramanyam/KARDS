@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
@@ -12,6 +13,7 @@ import {
   Sparkles,
   CheckCircle2,
   AlertTriangle,
+  Loader2,
 } from "lucide-react";
 import { StatCard } from "@/components/app/stat-card";
 import { Section } from "@/components/app/section";
@@ -19,22 +21,50 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { KardsAreaChart } from "@/components/ui/chart";
-import { companies, hoursTrend, scheduleVIIAllocation } from "@/lib/data";
-import { SCHEDULE_VII_META, ScheduleVII } from "@/lib/types";
-import { formatINR, cn } from "@/lib/utils";
+import { api, ApiError, type BudgetOut, type ProjectOut, type InvoiceOut } from "@/lib/api";
+import { formatINR } from "@/lib/utils";
 
 export function CompanyDashboard() {
-  const co = companies[0];
-  const usedPct = Math.round((co.budgetCommitted / co.csrBudgetAnnual) * 100);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [budgets, setBudgets] = useState<BudgetOut[]>([]);
+  const [projects, setProjects] = useState<ProjectOut[]>([]);
+  const [invoices, setInvoices] = useState<InvoiceOut[]>([]);
 
-  const allocationRows = (Object.keys(scheduleVIIAllocation) as ScheduleVII[])
-    .filter((c) => scheduleVIIAllocation[c].committed > 0)
-    .map((c) => {
-      const a = scheduleVIIAllocation[c];
-      return { category: c, ...a, pct: Math.round((a.utilized / a.committed) * 100) };
-    })
-    .sort((a, b) => b.committed - a.committed);
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [bs, ps, is] = await Promise.all([
+        api.csr.budgets().catch(() => []),
+        api.csr.projects({ limit: 10 }).then((p) => p.items).catch(() => []),
+        api.billing.invoices().catch(() => []),
+      ]);
+      setBudgets(bs);
+      setProjects(ps);
+      setInvoices(is);
+    } catch (e) {
+      setError((e as ApiError).message || "Could not load company dashboard data.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  if (loading) {
+    return (
+      <div className="grid place-items-center py-32 text-center">
+        <Loader2 className="size-8 animate-spin text-primary" />
+        <p className="mt-3 text-sm text-muted-foreground">Loading CSR Command Center…</p>
+      </div>
+    );
+  }
+
+  const activeBudget = budgets[0];
+  const totalBudget = activeBudget?.total_amount ?? 0;
 
   return (
     <div>
@@ -52,18 +82,14 @@ export function CompanyDashboard() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <p className="font-heading text-lg font-semibold">FY 2026-27 CSR budget</p>
-                <Badge variant={usedPct > 75 ? "warning" : "success"} dot>
-                  {usedPct}% utilized
-                </Badge>
+                <p className="font-heading text-lg font-semibold">
+                  {activeBudget ? `FY ${activeBudget.fiscal_year} CSR budget` : "No CSR budget set"}
+                </p>
+                <Badge variant="success" dot>Active ledger</Badge>
               </div>
               <p className="mt-0.5 text-sm text-muted-foreground">
-                {formatINR(co.budgetCommitted)} committed of {formatINR(co.csrBudgetAnnual)} ·{" "}
-                {formatINR(co.csrBudgetAnnual - co.budgetCommitted)} remaining
+                {activeBudget ? `Total allocated: ${formatINR(totalBudget)}` : "Set your annual budget to start tracking compliance."}
               </p>
-              <div className="mt-2.5 max-w-md">
-                <Progress value={usedPct} tone={usedPct > 75 ? "warning" : "accent"} className="h-2" />
-              </div>
             </div>
           </div>
           <div className="flex gap-2">
@@ -78,139 +104,55 @@ export function CompanyDashboard() {
 
       {/* Stats */}
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Hours logged (FY)" value={4860} format={(n) => n.toLocaleString("en-IN")} icon={Clock3} tone="primary" delta={{ value: "+18% vs Q1", positive: true }} />
-        <StatCard label="Budget deployed" value={12400000} format={(n) => `₹${(n / 10000000).toFixed(2)} Cr`} icon={IndianRupee} tone="success" delta={{ value: "+12%", positive: true }} />
-        <StatCard label="Employee volunteers" value={342} icon={Users} tone="accent" delta={{ value: "+64 this quarter", positive: true }} />
-        <StatCard label="NGOs engaged" value={6} icon={HeartHandshake} tone="violet" />
+        <StatCard label="Hours logged (FY)" value={0} format={(n) => n.toLocaleString("en-IN")} icon={Clock3} tone="primary" />
+        <StatCard label="Budget deployed" value={totalBudget} format={(n) => formatINR(n)} icon={IndianRupee} tone="success" />
+        <StatCard label="Employee volunteers" value={0} icon={Users} tone="accent" />
+        <StatCard label="NGOs engaged" value={projects.length} icon={HeartHandshake} tone="violet" />
       </div>
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-5">
-        {/* Trend chart */}
-        <Card className="lg:col-span-3">
-          <CardHeader className="flex-row items-center justify-between space-y-0">
-            <div>
-              <CardTitle>Deployment trend</CardTitle>
-              <CardDescription>Hours logged & budget deployed · last 11 months</CardDescription>
+      <div className="mt-8 grid gap-6 lg:grid-cols-2">
+        <Section title="Active projects" subtitle="Live CSR projects deployed in PostgreSQL">
+          {projects.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-border py-16 text-center text-sm text-muted-foreground">
+              No projects created yet. Create a project and invite partner NGOs.
             </div>
-            <div className="flex gap-3 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1.5">
-                <span className="size-2 rounded-full bg-primary" /> Hours
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="size-2 rounded-full bg-accent" /> Budget
-              </span>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <KardsAreaChart
-              data={hoursTrend}
-              xKey="month"
-              series={[
-                { key: "hours", name: "Hours", color: "hsl(var(--primary))" },
-                { key: "budget", name: "Budget (₹)", color: "hsl(var(--accent))", formatter: (v) => formatINR(v) },
-              ]}
-              height={260}
-            />
-          </CardContent>
-        </Card>
-
-        {/* Schedule VII allocation */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Schedule VII allocation</CardTitle>
-            <CardDescription>Legal categories · committed vs utilized</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {allocationRows.slice(0, 5).map((r) => {
-              const meta = SCHEDULE_VII_META[r.category];
-              return (
-                <div key={r.category}>
-                  <div className="mb-1 flex items-center justify-between text-xs">
-                    <span className="flex items-center gap-1.5 font-medium">
-                      <span className="size-2 rounded-full" style={{ background: meta.color }} />
-                      {meta.label}
-                    </span>
-                    <span className="text-muted-foreground">
-                      {formatINR(r.utilized)} / {formatINR(r.committed)}
-                    </span>
+          ) : (
+            <div className="space-y-3">
+              {projects.map((p) => (
+                <div key={p.id} className="flex items-center justify-between rounded-xl border border-border bg-card p-4">
+                  <div>
+                    <p className="font-semibold">{p.title}</p>
+                    <p className="text-xs text-muted-foreground capitalize">{p.category} · Budget: {formatINR(p.budget_amount)}</p>
                   </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${r.pct}%` }}
-                      transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
-                      className="h-full rounded-full"
-                      style={{ background: meta.color }}
-                    />
-                  </div>
+                  <Badge variant={p.status === "active" ? "success" : "secondary"}>{p.status}</Badge>
                 </div>
-              );
-            })}
-            <Link href="/app/company/roster" className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
-              Manage allocation <ArrowUpRight className="size-3" />
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Department targets + compliance status */}
-      <div className="mt-6 grid gap-6 lg:grid-cols-5">
-        <Section title="Department hour targets" subtitle="Roster-level CSR targets" className="lg:col-span-3">
-          <Card>
-            <CardContent className="p-5">
-              <div className="space-y-4">
-                {co.deptTargets.map((d, i) => {
-                  const pct = Math.min(100, Math.round((d.hoursDone / d.hoursTarget) * 100));
-                  return (
-                    <div key={d.department}>
-                      <div className="mb-1.5 flex items-center justify-between text-sm">
-                        <span className="font-medium">{d.department}</span>
-                        <span className="text-xs text-muted-foreground">
-                          <span className="font-semibold text-foreground">{d.hoursDone.toLocaleString()}</span> /{" "}
-                          {d.hoursTarget.toLocaleString()} hrs · {formatINR(d.budget)}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <Progress value={pct} className="h-2 flex-1" tone={pct >= 100 ? "success" : pct >= 60 ? "primary" : "warning"} />
-                        <span className={cn("w-10 text-right text-xs font-semibold", pct >= 100 ? "text-success" : "text-muted-foreground")}>
-                          {pct}%
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
+              ))}
+            </div>
+          )}
         </Section>
 
-        <div className="lg:col-span-2">
-          <Section title="Compliance health">
+        <Section title="Billing & Invoices" subtitle="Razorpay & manual invoices">
+          {invoices.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-border py-16 text-center text-sm text-muted-foreground">
+              No invoices generated yet.
+            </div>
+          ) : (
             <div className="space-y-3">
-              {[
-                { icon: CheckCircle2, tone: "text-success", title: "Schedule VII tagging 100%", desc: "Every project mapped at creation", ok: true },
-                { icon: CheckCircle2, tone: "text-success", title: "Certificates reconciled", desc: "Hours match applications exactly", ok: true },
-                { icon: AlertTriangle, tone: "text-warning", title: "FCRA renewal pending", desc: "Siksha Setu · renews 14 Sep 2026", ok: false },
-                { icon: CheckCircle2, tone: "text-success", title: "Q1 report accepted", desc: "0 audit queries from board", ok: true },
-              ].map((c) => (
-                <div key={c.title} className="flex items-start gap-3 rounded-xl border border-border bg-card p-3.5">
-                  <c.icon className={cn("mt-0.5 size-4 shrink-0", c.tone)} />
+              {invoices.map((inv) => (
+                <div key={inv.id} className="flex items-center justify-between rounded-xl border border-border bg-card p-4">
                   <div>
-                    <p className="text-sm font-medium">{c.title}</p>
-                    <p className="text-xs text-muted-foreground">{c.desc}</p>
+                    <p className="font-semibold">{inv.provider_invoice_id ?? inv.id.slice(0, 8)}</p>
+                    <p className="text-xs text-muted-foreground">Due: {inv.due_date}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold">{formatINR(inv.amount)}</p>
+                    <Badge variant={inv.status === "paid" ? "success" : "warning"}>{inv.status}</Badge>
                   </div>
                 </div>
               ))}
-              <div className="flex items-start gap-3 rounded-xl bg-gradient-to-br from-accent/12 to-transparent border border-accent/25 p-3.5">
-                <Sparkles className="mt-0.5 size-4 shrink-0 text-accent" />
-                <div>
-                  <p className="text-sm font-medium">Benchmarking add-on available</p>
-                  <p className="text-xs text-muted-foreground">Compare your deployment against 86 anonymized companies.</p>
-                </div>
-              </div>
             </div>
-          </Section>
-        </div>
+          )}
+        </Section>
       </div>
     </div>
   );
