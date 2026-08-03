@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus,
@@ -11,8 +11,9 @@ import {
   Pencil,
   Rocket,
   CircleStop,
-  FileBarChart,
   Layers,
+  Loader2,
+  Globe2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,73 +21,130 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/toast";
-import { opportunities } from "@/lib/data";
-import { Opportunity, SCHEDULE_VII_META, Lifecycle } from "@/lib/types";
+import { api, ApiError, type OpportunityOut } from "@/lib/api";
+import { SCHEDULE_VII_META, type ScheduleVII } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const lifecycleFlow: Lifecycle[] = ["draft", "published", "in_progress", "reported", "closed"];
-const lifecycleLabels: Record<Lifecycle, string> = {
+const lifecycleFlow = ["draft", "published", "in_progress", "completed", "closed"] as const;
+const lifecycleLabels: Record<string, string> = {
   draft: "Draft",
   published: "Published",
   in_progress: "In progress",
-  reported: "Reported",
+  completed: "Completed",
   closed: "Closed",
+};
+
+const badgeVariant: Record<string, "success" | "outline" | "secondary" | "warning" | "default"> = {
+  draft: "outline",
+  published: "success",
+  in_progress: "warning",
+  completed: "secondary",
+  closed: "secondary",
 };
 
 export function NgoProjects() {
   const { push } = useToast();
-  const [projects, setProjects] = useState(opportunities.filter((o) => o.ngoId === "ngo-siksha"));
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [projects, setProjects] = useState<OpportunityOut[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
-  const [advance, setAdvance] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [form, setForm] = useState({
     title: "",
     category: "education",
-    type: "long_term",
-    hours: "10",
-    budget: "500000",
     description: "",
+    location: "",
+    is_remote: false,
+    slots_total: "10",
+    hours_estimate: "10",
   });
 
-  const advanceProject = (id: string) => {
-    setProjects((ps) =>
-      ps.map((p) => {
-        if (p.id !== id) return p;
-        const idx = lifecycleFlow.indexOf(p.lifecycle);
-        const next = lifecycleFlow[Math.min(idx + 1, lifecycleFlow.length - 1)];
-        return { ...p, lifecycle: next };
-      })
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await api.csr.opportunities({ limit: 50 });
+      setProjects(data.items);
+    } catch (e) {
+      setError((e as ApiError).message || "Could not load projects.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const create = async () => {
+    try {
+      const opp = await api.csr.createOpportunity({
+        title: form.title.trim() || "Untitled project",
+        description: form.description || undefined,
+        category: form.category,
+        location: form.location || undefined,
+        is_remote: form.is_remote,
+        slots_total: Number(form.slots_total) || 1,
+        hours_estimate: Number(form.hours_estimate) || 0,
+      });
+      setProjects((ps) => [opp, ...ps]);
+      setCreateOpen(false);
+      setForm({ title: "", category: "education", description: "", location: "", is_remote: false, slots_total: "10", hours_estimate: "10" });
+      push("success", "Draft created", "Publish once the Schedule VII category and budget are set.");
+    } catch (e) {
+      push("error", "Could not create project", (e as ApiError).message);
+    }
+  };
+
+  const publish = async (id: string) => {
+    setBusyId(id);
+    try {
+      const opp = await api.csr.publishOpportunity(id);
+      setProjects((ps) => ps.map((p) => (p.id === id ? opp : p)));
+      push("success", "Published", "Schedule VII category + capacity validated.");
+    } catch (e) {
+      push("error", "Could not publish", (e as ApiError).message);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const complete = async (id: string) => {
+    setBusyId(id);
+    try {
+      const opp = await api.volunteering.completeOpportunity(id);
+      setProjects((ps) => ps.map((p) => (p.id === id ? opp : p)));
+      push("success", "Completed", "Certificates issued to accepted volunteers · logged to the audit trail.");
+    } catch (e) {
+      push("error", "Could not complete", (e as ApiError).message);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const close = async (id: string) => {
+    setBusyId(id);
+    try {
+      const opp = await api.csr.closeOpportunity(id);
+      setProjects((ps) => ps.map((p) => (p.id === id ? opp : p)));
+      push("success", "Closed", "Opportunity closed to new applications.");
+    } catch (e) {
+      push("error", "Could not close", (e as ApiError).message);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="grid place-items-center py-32 text-center">
+        <Loader2 className="size-8 animate-spin text-primary" />
+        <p className="mt-3 text-sm text-muted-foreground">Loading projects…</p>
+      </div>
     );
-    setAdvance(null);
-    push("success", "Lifecycle updated", "Transition logged to the compliance audit trail.");
-  };
-
-  const create = () => {
-    const newOpp: Opportunity = {
-      id: `opp-new-${Date.now()}`,
-      title: form.title || "Untitled project",
-      ngoName: "Siksha Setu Foundation",
-      ngoId: "ngo-siksha",
-      category: form.category as Opportunity["category"],
-      type: form.type as Opportunity["type"],
-      duration: form.type === "micro_task" ? "remote, 2–5 hrs" : "10 weeks",
-      location: "Pune",
-      remote: form.type === "micro_task",
-      slots: { total: 12, filled: 0 },
-      hours: Number(form.hours) || 10,
-      skills: [],
-      description: form.description || "Awaiting description.",
-      lifecycle: "draft",
-      sponsored: false,
-      postedDate: new Date().toISOString().slice(0, 10),
-    };
-    setProjects((ps) => [newOpp, ...ps]);
-    setCreateOpen(false);
-    push("success", "Draft created", "Publish once the Schedule VII category and budget are set.");
-  };
-
-  const canPublish = (p: Opportunity) => p.lifecycle === "draft";
-  const canAdvance = (p: Opportunity) => p.lifecycle !== "closed";
+  }
 
   return (
     <div>
@@ -111,97 +169,113 @@ export function NgoProjects() {
         </Button>
       </div>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-2">
-        <AnimatePresence>
-          {projects.map((p, i) => {
-            const meta = SCHEDULE_VII_META[p.category];
-            const idx = lifecycleFlow.indexOf(p.lifecycle);
-            return (
-              <motion.div
-                key={p.id}
-                layout
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.97 }}
-                transition={{ duration: 0.4 }}
-                className="flex flex-col rounded-2xl border border-border bg-card p-5"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge style={{ background: meta.soft, color: meta.color }}>{meta.label}</Badge>
-                      <Badge variant="secondary">{p.type === "micro_task" ? "Micro-task" : "Long-term"}</Badge>
-                    </div>
-                    <h3 className="mt-2 font-heading text-[15px] font-semibold leading-snug">{p.title}</h3>
-                    <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{p.description}</p>
-                  </div>
-                  <Badge variant={p.lifecycle === "published" ? "success" : p.lifecycle === "draft" ? "outline" : p.lifecycle === "closed" ? "secondary" : "warning"} dot>
-                    {lifecycleLabels[p.lifecycle]}
-                  </Badge>
-                </div>
+      {error && (
+        <div className="mt-4 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+          {error}
+        </div>
+      )}
 
-                {/* lifecycle stepper */}
-                <div className="mt-4 flex items-center gap-1">
-                  {lifecycleFlow.map((l, j) => (
-                    <div key={l} className="flex flex-1 items-center">
-                      <div
-                        className={cn(
-                          "h-1.5 flex-1 rounded-full",
-                          j <= idx ? "bg-primary" : "bg-muted"
+      {projects.length === 0 && !error ? (
+        <div className="mt-6 rounded-2xl border border-dashed border-border py-20 text-center text-sm text-muted-foreground">
+          No projects created yet. Create a draft and publish it to open volunteer applications.
+        </div>
+      ) : (
+        <div className="mt-6 grid gap-4 md:grid-cols-2">
+          <AnimatePresence>
+            {projects.map((p, i) => {
+              const meta = SCHEDULE_VII_META[p.category as ScheduleVII] ?? SCHEDULE_VII_META.other;
+              const idx = lifecycleFlow.indexOf(p.status as (typeof lifecycleFlow)[number]);
+              const busy = busyId === p.id;
+              return (
+                <motion.div
+                  key={p.id}
+                  layout
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.97 }}
+                  transition={{ duration: 0.4 }}
+                  className="flex flex-col rounded-2xl border border-border bg-card p-5"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge style={{ background: meta.soft, color: meta.color }}>{meta.label}</Badge>
+                        {p.is_remote && (
+                          <Badge variant="secondary">
+                            <Globe2 className="size-3" /> Remote
+                          </Badge>
                         )}
-                      />
+                      </div>
+                      <h3 className="mt-2 font-heading text-[15px] font-semibold leading-snug">{p.title}</h3>
+                      <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
+                        {p.description ?? "Awaiting description."}
+                      </p>
                     </div>
-                  ))}
-                </div>
-                <div className="mt-2 flex justify-between text-[10px] text-muted-foreground">
-                  <span>{p.slots.filled}/{p.slots.total} slots</span>
-                  <span>{p.hours}h · {p.location}</span>
-                  {p.budget !== undefined && <span>₹{(p.budget / 100000).toFixed(1)}L</span>}
-                </div>
+                    <Badge variant={badgeVariant[p.status] ?? "default"} dot>
+                      {lifecycleLabels[p.status] ?? p.status}
+                    </Badge>
+                  </div>
 
-                <div className="mt-4 flex flex-wrap gap-2 border-t border-border/70 pt-4">
-                  <Button size="sm" variant="outline" onClick={() => push("info", "Edit project", "Edits to published projects are versioned for compliance review.")}>
-                    <Pencil className="size-3.5" /> Edit
-                  </Button>
-                  {canPublish(p) && (
-                    <Button size="sm" variant="accent" onClick={() => { setProjects((ps) => ps.map((x) => x.id === p.id ? { ...x, lifecycle: "published" } : x)); push("success", "Published", "Schedule VII category + budget validated."); }}>
-                      <Rocket className="size-3.5" /> Publish
+                  <div className="mt-4 flex items-center gap-1">
+                    {lifecycleFlow.map((l, j) => (
+                      <div key={l} className="flex flex-1 items-center">
+                        <div className={cn("h-1.5 flex-1 rounded-full", j <= idx ? "bg-primary" : "bg-muted")} />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-2 flex justify-between text-[10px] text-muted-foreground">
+                    <span>
+                      {p.slots_filled}/{p.slots_total} slots
+                    </span>
+                    <span>
+                      {p.hours_estimate}h · {p.location ?? (p.is_remote ? "Remote" : "—")}
+                    </span>
+                    <span>{new Date(p.created_at).toLocaleDateString("en-IN")}</span>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2 border-t border-border/70 pt-4">
+                    <Button size="sm" variant="outline" disabled={busy} onClick={() => push("info", "Edit project", "Edits to published projects are versioned for compliance review.")}>
+                      <Pencil className="size-3.5" /> Edit
                     </Button>
-                  )}
-                  {canAdvance(p) && p.lifecycle !== "published" && (
-                    <Button size="sm" onClick={() => setAdvance(p.id)}>
-                      <ArrowRight className="size-3.5" /> Advance state
-                    </Button>
-                  )}
-                  {p.lifecycle === "published" && (
-                    <Button size="sm" variant="outline" onClick={() => setAdvance(p.id)}>
-                      <CircleStop className="size-3.5" /> Mark in progress
-                    </Button>
-                  )}
-                  {p.lifecycle === "in_progress" && (
-                    <Button size="sm" variant="outline" onClick={() => setAdvance(p.id)}>
-                      <FileBarChart className="size-3.5" /> Mark reported
-                    </Button>
-                  )}
-                  <button className="ml-auto flex cursor-pointer items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-                    <History className="size-3.5" /> Version history
-                  </button>
-                </div>
-              </motion.div>
-            );
-          })}
-        </AnimatePresence>
-      </div>
+                    {p.status === "draft" && (
+                      <Button size="sm" variant="accent" disabled={busy} onClick={() => publish(p.id)}>
+                        {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Rocket className="size-3.5" />} Publish
+                      </Button>
+                    )}
+                    {p.status === "published" && (
+                      <Button size="sm" disabled={busy} onClick={() => push("info", "Mark in progress", "In-progress is set server-side once volunteer applications are accepted and work begins.")}>
+                        <CircleStop className="size-3.5" /> Mark in progress
+                      </Button>
+                    )}
+                    {p.status === "in_progress" && (
+                      <Button size="sm" variant="outline" disabled={busy} onClick={() => complete(p.id)}>
+                        {busy ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />} Complete & issue certificates
+                      </Button>
+                    )}
+                    {(p.status === "draft" || p.status === "published" || p.status === "in_progress") && (
+                      <Button size="sm" variant="ghost" disabled={busy} onClick={() => close(p.id)}>
+                        <CircleStop className="size-3.5" /> Close
+                      </Button>
+                    )}
+                    <button className="ml-auto flex cursor-pointer items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                      <History className="size-3.5" /> Version history
+                    </button>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+        </div>
+      )}
 
       <Card className="mt-6">
         <CardContent className="flex items-start gap-3 p-5">
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
           <div className="text-sm">
-            <p className="font-semibold">Budget validation on publish</p>
+            <p className="font-semibold">Capacity validation on publish</p>
             <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-              Publishing a sponsored project is blocked if <span className="font-mono">budget_allocated</span>{" "}
-              exceeds the sponsoring company's remaining CSR budget for the period. Volunteer slots are capped at
-              application time, not just display.
+              Publishing an opportunity opens it to volunteer applications; slots are capped at application time,
+              not just display. State transitions are validated against the server-side state machine.
             </p>
           </div>
         </CardContent>
@@ -222,21 +296,32 @@ export function NgoProjects() {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Schedule VII</Label>
-              <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v })} options={(Object.keys(SCHEDULE_VII_META) as Opportunity["category"][]).map((c) => ({ value: c, label: SCHEDULE_VII_META[c].label }))} />
+              <Select
+                value={form.category}
+                onValueChange={(v) => setForm({ ...form, category: v })}
+                options={(Object.keys(SCHEDULE_VII_META) as ScheduleVII[]).map((c) => ({ value: c, label: SCHEDULE_VII_META[c].label }))}
+              />
             </div>
             <div className="space-y-2">
-              <Label>Type</Label>
-              <Select value={form.type} onValueChange={(v) => setForm({ ...form, type: v })} options={[{ value: "long_term", label: "Long-term" }, { value: "micro_task", label: "Micro-task" }]} />
+              <Label>Location</Label>
+              <Input placeholder="Pune" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
             </div>
+          </div>
+          <div className="flex items-center justify-between rounded-xl border border-border p-3.5">
+            <div>
+              <p className="text-sm font-medium">Remote opportunity</p>
+              <p className="text-xs text-muted-foreground">Volunteers can contribute remotely</p>
+            </div>
+            <Switch checked={form.is_remote} onCheckedChange={(v) => setForm({ ...form, is_remote: v })} />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Est. hours</Label>
-              <Input type="number" value={form.hours} onChange={(e) => setForm({ ...form, hours: e.target.value })} />
+              <Label>Slots</Label>
+              <Input type="number" min={1} value={form.slots_total} onChange={(e) => setForm({ ...form, slots_total: e.target.value })} />
             </div>
             <div className="space-y-2">
-              <Label>Budget (₹)</Label>
-              <Input type="number" value={form.budget} onChange={(e) => setForm({ ...form, budget: e.target.value })} />
+              <Label>Est. hours / volunteer</Label>
+              <Input type="number" min={0} value={form.hours_estimate} onChange={(e) => setForm({ ...form, hours_estimate: e.target.value })} />
             </div>
           </div>
           <div className="space-y-2">
@@ -248,21 +333,6 @@ export function NgoProjects() {
           <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
           <Button onClick={create}>
             <Layers className="size-4" /> Save as draft
-          </Button>
-        </DialogFooter>
-      </Dialog>
-
-      <Dialog open={!!advance} onOpenChange={(o) => !o && setAdvance(null)}>
-        <DialogHeader>
-          <DialogTitle>Advance lifecycle state</DialogTitle>
-          <DialogDescription>
-            Transitions are validated against the state machine — skipping states is not allowed.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setAdvance(null)}>Cancel</Button>
-          <Button onClick={() => advanceProject(advance!)}>
-            <CheckCircle2 className="size-4" /> Confirm transition
           </Button>
         </DialogFooter>
       </Dialog>
