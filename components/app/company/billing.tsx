@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   CreditCard,
@@ -11,6 +11,7 @@ import {
   ArrowRight,
   BadgeCheck,
   RefreshCcw,
+  Loader2,
 } from "lucide-react";
 import { StatCard } from "@/components/app/stat-card";
 import { Section } from "@/components/app/section";
@@ -20,23 +21,86 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
-import { companies, invoices } from "@/lib/data";
-import { PLANS } from "@/lib/types";
+import { api, ApiError, type InvoiceOut, type PlanOut, type SubscriptionOut } from "@/lib/api";
 import { formatINR, cn } from "@/lib/utils";
 
-const invoiceTone = { paid: "success", pending: "warning", overdue: "destructive" } as const;
+const invoiceTone: Record<string, "success" | "warning" | "destructive" | "default"> = {
+  paid: "success",
+  pending: "warning",
+  overdue: "destructive",
+};
+
+const subTone: Record<string, "success" | "warning" | "secondary" | "destructive"> = {
+  active: "success",
+  trial: "warning",
+  past_due: "warning",
+  cancelled: "secondary",
+  expired: "destructive",
+};
 
 export function BillingPage() {
   const { push } = useToast();
-  const co = companies[0];
-  const current = PLANS.find((p) => p.tier === co.planTier)!;
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [plans, setPlans] = useState<PlanOut[]>([]);
+  const [subscription, setSubscription] = useState<SubscriptionOut | null>(null);
+  const [invoices, setInvoices] = useState<InvoiceOut[]>([]);
   const [changeOpen, setChangeOpen] = useState(false);
-  const [targetPlan, setTargetPlan] = useState(current.name);
-  const [grace, setGrace] = useState(false);
+  const [targetPlan, setTargetPlan] = useState<string>("");
+  const [subscribing, setSubscribing] = useState(false);
 
-  const successFee = 186000;
-  const budgetDeployed = 12400000;
-  const usagePct = Math.round((successFee / (budgetDeployed * 0.015)) * 100);
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [ps, sub, is] = await Promise.all([
+        api.billing.plans().catch(() => []),
+        api.billing.subscription().catch(() => null),
+        api.billing.invoices().catch(() => []),
+      ]);
+      setPlans(ps);
+      setSubscription(sub);
+      setInvoices(is);
+    } catch (e) {
+      setError((e as ApiError).message || "Could not load billing data.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const current = plans.find((p) => p.id === subscription?.plan_id) ?? null;
+
+  const subscribe = async () => {
+    if (!targetPlan) return;
+    setSubscribing(true);
+    try {
+      const sub = await api.billing.subscribe(targetPlan);
+      setSubscription(sub);
+      setChangeOpen(false);
+      push("success", "Plan updated", "Subscription change logged · prorated invoice generated.");
+      load();
+    } catch (e) {
+      push("error", "Could not subscribe", (e as ApiError).message);
+    } finally {
+      setSubscribing(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="grid place-items-center py-32 text-center">
+        <Loader2 className="size-8 animate-spin text-primary" />
+        <p className="mt-3 text-sm text-muted-foreground">Loading billing…</p>
+      </div>
+    );
+  }
+
+  const usagePct = 0;
+  const annualPrice = current?.price_annual ?? 0;
 
   return (
     <div>
@@ -55,61 +119,76 @@ export function BillingPage() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <p className="font-heading text-lg font-semibold">Growth plan</p>
-                <Badge variant="accent">Active</Badge>
+                <p className="font-heading text-lg font-semibold">{current?.name ?? "No active plan"}</p>
+                {subscription && (
+                  <Badge variant={subTone[subscription.status] ?? "secondary"} dot>
+                    {subscription.status}
+                  </Badge>
+                )}
               </div>
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                {formatINR(current.priceAnnual)}/year · {co.seatsIncluded} seats included · renews{" "}
-                {co.renewalDate} · paid via Razorpay (GST invoice included)
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {current.features.slice(0, 4).map((f) => (
-                  <span key={f} className="flex items-center gap-1.5 rounded-full border border-border/70 bg-card px-2.5 py-1 text-[11px] text-muted-foreground">
-                    <BadgeCheck className="size-3 text-success" /> {f}
-                  </span>
-                ))}
-              </div>
+              {current ? (
+                <>
+                  <p className="mt-0.5 text-sm text-muted-foreground">
+                    {formatINR(current.price_annual)}/year · {current.seats} seats included
+                    {subscription?.current_period_end &&
+                      ` · renews ${new Date(subscription.current_period_end).toLocaleDateString("en-IN")}`}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {current.features.slice(0, 4).map((f) => (
+                      <span key={f} className="flex items-center gap-1.5 rounded-full border border-border/70 bg-card px-2.5 py-1 text-[11px] text-muted-foreground">
+                        <BadgeCheck className="size-3 text-success" /> {f}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  {error ?? "Subscribe to a plan to unlock compliance reports, roster management and billing."}
+                </p>
+              )}
             </div>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setGrace(true)}>
-              <RefreshCcw className="size-4" /> Payment method
-            </Button>
-            <Button onClick={() => setChangeOpen(true)}>
-              Change plan <ArrowRight className="size-4" />
-            </Button>
-          </div>
+          {plans.length > 0 && (
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => push("info", "Payment method", "Payments are processed securely via Razorpay on the billing backend.")}>
+                <RefreshCcw className="size-4" /> Payment method
+              </Button>
+              <Button onClick={() => { setTargetPlan(current?.id ?? ""); setChangeOpen(true); }}>
+                Change plan <ArrowRight className="size-4" />
+              </Button>
+            </div>
+          )}
         </div>
       </motion.div>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-3">
-        <StatCard label="Annual subscription" value={current.priceAnnual} format={(n) => formatINR(n)} icon={CreditCard} tone="primary" />
-        <StatCard label="Success fees billed (FY)" value={278000} format={(n) => formatINR(n)} icon={Zap} tone="accent" hint="1.5% of deployed budget" />
-        <StatCard label="Invoices" value={3} icon={ReceiptText} tone="success" />
+        <StatCard label="Annual subscription" value={annualPrice} format={(n) => formatINR(n)} icon={CreditCard} tone="primary" />
+        <StatCard label="Success fees billed (FY)" value={0} format={(n) => formatINR(n)} icon={Zap} tone="accent" hint="metered from deployed budget events" />
+        <StatCard label="Invoices" value={invoices.length} icon={ReceiptText} tone="success" />
       </div>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-3">
-        {/* Usage metering */}
+        {/* Plan */}
         <Card className="lg:col-span-1">
           <CardHeader>
-            <CardTitle>Success fee metering</CardTitle>
-            <CardDescription>1.5% of budget deployed through Kards</CardDescription>
+            <CardTitle>Current plan</CardTitle>
+            <CardDescription>{current ? `${current.name} · billed annually` : "No subscription yet"}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex items-baseline justify-between">
-              <span className="font-heading text-2xl font-bold">{formatINR(successFee)}</span>
-              <span className="text-xs text-muted-foreground">Q3 FY 2026</span>
+              <span className="font-heading text-2xl font-bold">{formatINR(annualPrice)}</span>
+              <span className="text-xs text-muted-foreground">/year</span>
             </div>
             <Progress value={usagePct} tone="accent" className="mt-3" />
             <p className="mt-2 text-xs text-muted-foreground">
-              Metered from the <span className="font-medium text-foreground">budget deployed event log</span>{" "}
+              Usage metering is computed from the <span className="font-medium text-foreground">budget deployed event log</span>{" "}
               tied to closed projects — auto-invoiced each quarter.
             </p>
             <div className="mt-4 space-y-2.5">
               {[
-                { label: "Budget deployed (Q3)", value: formatINR(budgetDeployed) },
-                { label: "Rate", value: "1.5%" },
-                { label: "Fee accrued", value: formatINR(successFee) },
+                { label: "Seats included", value: String(current?.seats ?? 0) },
+                { label: "Billing cycle", value: "Annual" },
+                { label: "Provider", value: "Razorpay" },
               ].map((r) => (
                 <div key={r.label} className="flex items-center justify-between border-b border-border/60 pb-2 text-sm last:border-0">
                   <span className="text-muted-foreground">{r.label}</span>
@@ -124,37 +203,45 @@ export function BillingPage() {
         <div className="lg:col-span-2">
           <Section title="Invoices" subtitle="GST-compliant, reconciled against Razorpay webhooks.">
             <div className="space-y-3">
-              {invoices.map((inv, i) => (
-                <motion.div
-                  key={inv.id}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, delay: i * 0.06 }}
-                  className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-muted">
-                      <ReceiptText className="size-5 text-muted-foreground" />
+              {invoices.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-border py-16 text-center text-sm text-muted-foreground">
+                  No invoices generated yet.
+                </div>
+              ) : (
+                invoices.map((inv, i) => (
+                  <motion.div
+                    key={inv.id}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4, delay: i * 0.06 }}
+                    className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-muted">
+                        <ReceiptText className="size-5 text-muted-foreground" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold">{inv.provider_invoice_id ?? inv.id.slice(0, 8)}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {inv.provider} · {new Date(inv.created_at).toLocaleDateString("en-IN")}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-semibold">{inv.number}</p>
-                      <p className="text-xs text-muted-foreground">{inv.period}</p>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <p className="text-sm font-bold">{formatINR(inv.amount)}</p>
+                        <p className="text-[11px] text-muted-foreground">due {new Date(inv.due_date).toLocaleDateString("en-IN")}</p>
+                      </div>
+                      <Badge variant={invoiceTone[inv.status] ?? "default"} dot>
+                        {inv.status}
+                      </Badge>
+                      <Button variant="outline" size="icon-sm" onClick={() => push("success", "Invoice downloaded", `${inv.provider_invoice_id ?? inv.id.slice(0, 8)} · PDF + GST breakdown`)}>
+                        <Download className="size-3.5" />
+                      </Button>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="text-right">
-                      <p className="text-sm font-bold">{formatINR(inv.amount)}</p>
-                      <p className="text-[11px] text-muted-foreground">due {inv.dueDate}</p>
-                    </div>
-                    <Badge variant={invoiceTone[inv.status]} dot>
-                      {inv.status}
-                    </Badge>
-                    <Button variant="outline" size="icon-sm" onClick={() => push("success", "Invoice downloaded", `${inv.number} · PDF + GST breakdown`)}>
-                      <Download className="size-3.5" />
-                    </Button>
-                  </div>
-                </motion.div>
-              ))}
+                  </motion.div>
+                ))
+              )}
             </div>
           </Section>
         </div>
@@ -182,60 +269,34 @@ export function BillingPage() {
           <DialogDescription>Prorated on change · billed annually · GST extra</DialogDescription>
         </DialogHeader>
         <div className="grid gap-2">
-          {PLANS.map((p) => (
+          {plans.map((p) => (
             <button
-              key={p.tier}
-              onClick={() => setTargetPlan(p.name)}
+              key={p.id}
+              onClick={() => setTargetPlan(p.id)}
               className={cn(
                 "flex cursor-pointer items-center justify-between rounded-xl border p-3.5 text-left transition-colors",
-                targetPlan === p.name ? "border-primary bg-primary/5 ring-2 ring-primary/20" : "border-border"
+                targetPlan === p.id ? "border-primary bg-primary/5 ring-2 ring-primary/20" : "border-border"
               )}
             >
               <div>
                 <p className="text-sm font-semibold">{p.name}</p>
-                <p className="text-xs text-muted-foreground">{p.seats} seats · {formatINR(p.priceAnnual)}/yr</p>
+                <p className="text-xs text-muted-foreground">{p.seats} seats · {formatINR(p.price_annual)}/yr</p>
               </div>
-              {p.tier === co.planTier && <Badge variant="secondary">Current</Badge>}
+              {subscription?.plan_id === p.id && <Badge variant="secondary">Current</Badge>}
             </button>
           ))}
+          {plans.length === 0 && (
+            <p className="rounded-xl border border-border p-4 text-sm text-muted-foreground">
+              No plans available.
+            </p>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setChangeOpen(false)}>Cancel</Button>
-          <Button
-            onClick={() => {
-              setChangeOpen(false);
-              push("success", "Plan change requested", `${targetPlan} · prorated invoice generated.`);
-            }}
-          >
+          <Button disabled={!targetPlan || subscribing} onClick={subscribe}>
+            {subscribing ? <Loader2 className="size-4 animate-spin" /> : <ArrowRight className="size-4" />}
             Confirm change
           </Button>
-        </DialogFooter>
-      </Dialog>
-
-      {/* Grace period dialog */}
-      <Dialog open={grace} onOpenChange={setGrace}>
-        <DialogHeader>
-          <DialogTitle>Payment method</DialogTitle>
-          <DialogDescription>Managed securely via Razorpay.</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div className="flex items-center justify-between rounded-xl border border-border p-3.5">
-            <div className="flex items-center gap-3">
-              <span className="grid size-9 place-items-center rounded-lg bg-primary/10 text-primary font-semibold">RZP</span>
-              <div>
-                <p className="text-sm font-medium">HDFC Bank ·••• 4281</p>
-                <p className="text-xs text-muted-foreground">Expires 08/29 · UPI linked</p>
-              </div>
-            </div>
-            <Badge variant="success" dot>Primary</Badge>
-          </div>
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            If a renewal payment fails, features stay active during a <span className="font-medium text-foreground">7-day grace period</span>.
-            Webhook reconciliation keeps Kards and Razorpay in sync as source of truth.
-          </p>
-        </div>
-        <DialogFooter>
-          <Button onClick={() => setGrace(false)}>Close</Button>
         </DialogFooter>
       </Dialog>
     </div>
