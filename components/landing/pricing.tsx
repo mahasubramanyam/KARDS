@@ -11,7 +11,8 @@ import { cn } from "@/lib/utils";
 
 export function Pricing() {
   return (
-    <section id="nav_companies" className="relative py-24 sm:py-32">
+    <div id="nav_companies">
+      <section id="pricing" className="relative py-24 sm:py-32">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <SectionHeading
           eyebrow="Pricing"
@@ -112,5 +113,6 @@ export function Pricing() {
         </motion.div>
       </div>
     </section>
+    </div>
   );
 }

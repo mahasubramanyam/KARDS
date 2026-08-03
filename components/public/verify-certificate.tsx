@@ -21,7 +21,7 @@ export function VerifyCertificate({ code }: { code: string }) {
     async function check() {
       if (!CODE_RE.test(clean)) {
         setLoading(false);
-        setResult({ valid: false, code: clean });
+        setResult(null);
         return;
       }
       try {
@@ -30,7 +30,7 @@ export function VerifyCertificate({ code }: { code: string }) {
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : "Verification failed");
-          setResult({ valid: false, code: clean });
+          setResult(null);
         }
       } finally {
         if (!cancelled) setLoading(false);
