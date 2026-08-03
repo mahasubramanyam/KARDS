@@ -624,6 +624,14 @@ export const volunteering = {
 
 export const verification = {
   documents: () => request<DocumentOut[]>("/verification/documents"),
+  uploadDocument: (file: File, subject_id: string, doc_type?: string) => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("subject_type", "ngo_verification");
+    form.append("subject_id", subject_id);
+    if (doc_type) form.append("doc_type", doc_type);
+    return request<DocumentOut>("/verification/documents", { method: "POST", body: form });
+  },
   submit: (document_ids: string[]) =>
     request<VerificationRequestOut>("/verification/submit", { method: "POST", body: { document_ids } }),
   status: () => request<VerificationRequestOut | null>("/verification/status"),
@@ -709,7 +717,8 @@ export const disputes = {
   file: (payload: { subject_type: string; subject_id: string; summary: string }) =>
     request<DisputeOut>("/disputes", { method: "POST", body: payload }),
   get: (id: string) => request<DisputeOut>(`/disputes/${id}`),
-  adminQueue: () => request<DisputeOut[]>("/disputes/admin/queue"),
+  adminQueue: (query?: { skip?: number; limit?: number }) =>
+    request<Page<DisputeOut>>("/disputes/admin/queue", { query }),
   resolve: (id: string, decision: string) =>
     request<DisputeOut>(`/disputes/admin/${id}/resolve`, { method: "POST", body: { decision } }),
 };
@@ -719,7 +728,8 @@ export const admin = {
     request<Page<UserOut>>("/admin/users", { query }),
   deactivate: (id: string) => request<UserOut>(`/admin/users/${id}/deactivate`, { method: "POST" }),
   activate: (id: string) => request<UserOut>(`/admin/users/${id}/activate`, { method: "POST" }),
-  auditLogs: (query?: { skip?: number; limit?: number }) => request<Page<AuditOut>>("/admin/audit-logs", { query }),
+  auditLogs: (query?: { severity?: string; skip?: number; limit?: number }) =>
+    request<Page<AuditOut>>("/admin/audit-logs", { query }),
 };
 
 export const apiKeys = {
