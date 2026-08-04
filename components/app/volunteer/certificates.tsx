@@ -99,7 +99,7 @@ export function CertificatesPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.volunteering.myCertificates();
+      const data = await api.volunteering.myCertificates().catch(() => []);
       setCertificates(data);
     } catch (e) {
       setError((e as ApiError).message || "Could not load certificates.");

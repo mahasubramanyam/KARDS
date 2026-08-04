@@ -40,7 +40,7 @@ export function VolunteerDashboard() {
     try {
       const [oppPage, appPage] = await Promise.all([
         api.public.opportunities({ skip: 0, limit: 20 }),
-        api.volunteering.myApplications({ limit: 10 }),
+        api.volunteering.myApplications({ limit: 10 }).catch(() => ({ items: [], total: 0, page: 1, page_size: 10, has_more: false })),
       ]);
       const mapped = oppPage.items.map(toOpportunity);
       setOpportunities(mapped);

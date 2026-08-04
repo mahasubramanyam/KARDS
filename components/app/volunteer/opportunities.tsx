@@ -38,7 +38,7 @@ export function OpportunitiesPage() {
     try {
       const [page, apps] = await Promise.all([
         api.public.opportunities({ skip: 0, limit: 50 }),
-        api.volunteering.myApplications({ limit: 100 }),
+        api.volunteering.myApplications({ limit: 100 }).catch(() => ({ items: [], total: 0, page: 1, page_size: 100, has_more: false })),
       ]);
       setOpportunities(page.items.map(toOpportunity));
       setAppliedIds(new Set(apps.items.filter((a) => a.status !== "withdrawn" && a.status !== "rejected").map((a) => a.opportunity_id)));
