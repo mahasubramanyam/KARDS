@@ -564,8 +564,9 @@ export const users = {
   me: () => request<ProfileOut>("/users/me"),
   updateVolunteer: (payload: Partial<VolunteerProfileOut & { phone?: string }>) =>
     request<ProfileOut>("/users/me/volunteer", { method: "PATCH", body: payload }),
-  updateNgo: (payload: Partial<NgoProfileOut>) => request<ProfileOut>("/users/me/ngo", { method: "PATCH", body: payload }),
-  updateCompany: (payload: Partial<CompanyProfileOut>) =>
+  updateNgo: (payload: Partial<NgoProfileOut & { phone?: string }>) =>
+    request<ProfileOut>("/users/me/ngo", { method: "PATCH", body: payload }),
+  updateCompany: (payload: Partial<CompanyProfileOut & { phone?: string }>) =>
     request<ProfileOut>("/users/me/company", { method: "PATCH", body: payload }),
   setLocale: (locale: Locale) => request<ProfileOut>("/users/me/locale", { method: "PATCH", body: { locale } }),
 };

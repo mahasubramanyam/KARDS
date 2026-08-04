@@ -1,8 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Bell, Check, ChevronDown, Command, LogOut, Search, Settings } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { roleForPath } from "./nav";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -50,6 +53,9 @@ export function Topbar({
   user: { name: string; role: string };
 }) {
   const { logout } = useAuth();
+  const pathname = usePathname();
+  const currentRole = roleForPath(pathname);
+  const settingsHref = `/app/${currentRole}/settings`;
   const [notifOpen, setNotifOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
@@ -136,16 +142,17 @@ export function Topbar({
               <p className="text-xs text-muted-foreground">{user.role} · Kards demo</p>
             </div>
             {[
-              { icon: Settings, label: "Settings" },
-              { icon: Check, label: "My certificates" },
+              { icon: Settings, label: "Settings", href: settingsHref },
+              { icon: Check, label: "My certificates", href: "/app/volunteer/certificates" },
             ].map((i) => (
-              <button
+              <Link
                 key={i.label}
+                href={i.href}
                 className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-muted"
               >
                 <i.icon className="size-4 text-muted-foreground" />
                 {i.label}
-              </button>
+              </Link>
             ))}
             <button
               onClick={async () => {

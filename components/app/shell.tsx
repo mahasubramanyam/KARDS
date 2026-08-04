@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
@@ -11,6 +11,7 @@ import { RoleSwitcher } from "./role-switcher";
 import { SidebarNav } from "./sidebar-nav";
 import { NAV, ROLE_LABEL, ROLE_DESC, roleForPath } from "./nav";
 import { useAuth } from "@/lib/auth";
+import { api, isAuthenticated } from "@/lib/api";
 
 const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/app/volunteer": { title: "Volunteer Dashboard", subtitle: "Recommended for you, based on skill & location" },
@@ -31,16 +32,60 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/app/admin/audit": { title: "Audit Log", subtitle: "Append-only trail of every admin action" },
   "/app/admin/disputes": { title: "Disputes", subtitle: "Resolve issues with a logged decision" },
   "/app/admin/api": { title: "API Keys", subtitle: "White-label public REST access for partners" },
+  "/app/volunteer/settings": { title: "Volunteer Settings", subtitle: "Account, profile & preferences" },
+  "/app/ngo/settings": { title: "NGO Settings", subtitle: "Organisation profile & preferences" },
+  "/app/company/settings": { title: "Company Settings", subtitle: "CSR profile & preferences" },
+  "/app/admin/settings": { title: "Admin Settings", subtitle: "Platform preferences" },
 };
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const role = roleForPath(pathname);
   const { user } = useAuth();
+  const role = roleForPath(pathname);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [counts, setCounts] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (!isAuthenticated()) return;
+    const fetchCounts = async () => {
+      try {
+        const c: Record<string, number> = {};
+        const threads = await api.messaging.threads().catch(() => []);
+        if (threads.length > 0) {
+          c["/app/volunteer/messages"] = threads.length;
+          c["/app/ngo/messages"] = threads.length;
+          c["/app/company/messages"] = threads.length;
+        }
+
+        if (role === "admin") {
+          const vQueue = await api.verification.queue({ limit: 1 }).catch(() => null);
+          if (vQueue && vQueue.total > 0) c["/app/admin/verification"] = vQueue.total;
+
+          const dQueue = await api.disputes.adminQueue({ limit: 1 }).catch(() => null);
+          if (dQueue && dQueue.total > 0) c["/app/admin/disputes"] = dQueue.total;
+        }
+
+        if (role === "ngo") {
+          const status = await api.verification.status().catch(() => null);
+          if (status && status.status === "pending") c["/app/ngo/verification"] = 1;
+        }
+
+        setCounts(c);
+      } catch {
+        // ignore
+      }
+    };
+    fetchCounts();
+  }, [role]);
+
   const meta = PAGE_TITLES[pathname] ?? { title: "Kards", subtitle: ROLE_DESC[role] };
 
   const authUser = user ? { name: user.full_name, role: user.role } : { name: "Volunteer", role: "volunteer" };
+
+  const navItems = NAV[role].map((item) => ({
+    ...item,
+    badge: counts[item.href] || undefined,
+  }));
 
   const SidebarContent = (
     <>
@@ -54,7 +99,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <p className="mb-2 px-3.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
             {ROLE_LABEL[role]}
           </p>
-          <SidebarNav items={NAV[role]} activePath={pathname} />
+          <SidebarNav items={navItems} activePath={pathname} />
         </div>
         <RoleSwitcher />
       </div>

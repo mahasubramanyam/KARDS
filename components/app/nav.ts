@@ -45,11 +45,11 @@ export const NAV: Record<Role, NavItem[]> = {
     { href: "/app/volunteer", label: "Dashboard", icon: LayoutDashboard },
     { href: "/app/volunteer/opportunities", label: "Opportunities", icon: Compass },
     { href: "/app/volunteer/certificates", label: "Certificates", icon: BadgeCheck },
-    { href: "/app/volunteer/messages", label: "Messages", icon: MessageSquare, badge: 2 },
+    { href: "/app/volunteer/messages", label: "Messages", icon: MessageSquare },
   ],
   ngo: [
     { href: "/app/ngo", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/app/ngo/verification", label: "Verification", icon: FileSearch, badge: 1 },
+    { href: "/app/ngo/verification", label: "Verification", icon: FileSearch },
     { href: "/app/ngo/projects", label: "Projects", icon: FolderKanban },
     { href: "/app/ngo/messages", label: "Messages", icon: MessageSquare },
   ],
@@ -62,9 +62,9 @@ export const NAV: Record<Role, NavItem[]> = {
   ],
   admin: [
     { href: "/app/admin", label: "Dashboard", icon: BarChart3 },
-    { href: "/app/admin/verification", label: "Verification Queue", icon: ShieldCheck, badge: 3 },
+    { href: "/app/admin/verification", label: "Verification Queue", icon: ShieldCheck },
     { href: "/app/admin/audit", label: "Audit Log", icon: ScrollText },
-    { href: "/app/admin/disputes", label: "Disputes", icon: Scale, badge: 1 },
+    { href: "/app/admin/disputes", label: "Disputes", icon: Scale },
     { href: "/app/admin/api", label: "API Keys", icon: KeyRound },
   ],
 };
