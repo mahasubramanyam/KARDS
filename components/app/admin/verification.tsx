@@ -42,8 +42,8 @@ export function AdminVerification() {
       const data = await api.verification.queue({ limit: 50 });
       setQueue(data.items);
       setActiveId((prev) => prev ?? data.items[0]?.id ?? null);
-    } catch (e) {
-      setError((e as ApiError).message || "Could not load verification queue.");
+    } catch {
+      setQueue([]);
     } finally {
       setLoading(false);
     }

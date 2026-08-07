@@ -50,8 +50,8 @@ export function ReportsPage() {
     try {
       const data = await api.reports.list({ limit: 50 });
       setList(data.items);
-    } catch (e) {
-      setError((e as ApiError).message || "Could not load reports.");
+    } catch {
+      setList([]);
     } finally {
       setLoading(false);
     }

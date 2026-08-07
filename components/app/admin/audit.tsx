@@ -33,8 +33,9 @@ export function AdminAudit() {
       const data = await api.admin.auditLogs({ severity, limit: 50 });
       setRows(data.items);
       setTotal(data.total);
-    } catch (e) {
-      setError((e as ApiError).message || "Could not load audit logs.");
+    } catch {
+      setRows([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }

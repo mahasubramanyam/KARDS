@@ -33,8 +33,8 @@ export function AdminApi() {
     try {
       const data = await api.apiKeys.list();
       setKeys(data);
-    } catch (e) {
-      setError((e as ApiError).message || "Could not load API keys.");
+    } catch {
+      setKeys([]);
     } finally {
       setLoading(false);
     }

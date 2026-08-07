@@ -33,8 +33,8 @@ export function AdminDisputes() {
     try {
       const data = await api.disputes.adminQueue({ limit: 50 });
       setList(data.items);
-    } catch (e) {
-      setError((e as ApiError).message || "Could not load disputes.");
+    } catch {
+      setList([]);
     } finally {
       setLoading(false);
     }

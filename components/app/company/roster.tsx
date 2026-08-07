@@ -23,8 +23,8 @@ export function RosterPage() {
     try {
       const me = await api.users.me();
       setCompany(me.company);
-    } catch (e) {
-      setError((e as ApiError).message || "Could not load company profile.");
+    } catch {
+      setCompany(null);
     } finally {
       setLoading(false);
     }
